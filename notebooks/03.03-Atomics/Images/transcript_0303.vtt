@@ -1,0 +1,428 @@
+WEBVTT
+
+00:00:00.768 --> 00:00:03.450
+In the Kernels section, we
+fixed a bug caused by splitting
+
+00:00:03.490 --> 00:00:04.838
+threads into blocks.
+
+00:00:04.891 --> 00:00:08.673
+It's only natural to ask, why have
+all this complexity with thread
+
+00:00:08.693 --> 00:00:10.776
+hierarchy in the first place?
+
+00:00:10.814 --> 00:00:14.837
+To find out, let's modify our
+problem a bit to see where thread
+
+00:00:14.877 --> 00:00:17.276
+blocks truly make a difference.
+
+00:00:17.379 --> 00:00:19.940
+Let's now create a histogram
+for the temperatures that
+
+00:00:19.980 --> 00:00:21.565
+our simulator produces.
+
+00:00:21.621 --> 00:00:24.603
+A histogram helps us see
+how frequently certain
+
+00:00:24.643 --> 00:00:26.468
+temperature ranges occur.
+
+00:00:26.533 --> 00:00:29.046
+So let's quickly
+review how it works.
+
+00:00:29.114 --> 00:00:32.920
+First, we divide the entire
+temperature range into bins,
+
+00:00:32.996 --> 00:00:36.921
+each covering the same span,
+in our case, 10 degrees.
+
+00:00:36.998 --> 00:00:40.339
+For each cell in the simulation,
+we determine which bin its
+
+00:00:40.379 --> 00:00:42.034
+temperature falls into.
+
+00:00:42.100 --> 00:00:44.853
+A simple way to do this is
+to divide the temperature
+
+00:00:44.881 --> 00:00:47.824
+by the bin width and round down.
+
+00:00:47.923 --> 00:00:50.304
+For example, if a cell's
+temperature is four degrees,
+
+00:00:50.384 --> 00:00:55.470
+we divide 10 and get zero,
+which corresponds to the first bin.
+
+00:00:55.558 --> 00:00:58.080
+If a cell's temperature is
+15 degrees, dividing by 10
+
+00:00:58.080 --> 00:01:01.849
+gives us 1, meaning it goes
+into the second bin.
+
+00:01:01.962 --> 00:01:05.164
+Once we've assigned each cell
+to the correct bin, we count
+
+00:01:05.204 --> 00:01:07.983
+how many cells landed in each bin.
+
+00:01:08.046 --> 00:01:12.094
+That count becomes the height
+of the bar in the histogram.
+
+00:01:12.208 --> 00:01:15.130
+In our example, eight cells
+fall into the first bin and
+
+00:01:15.190 --> 00:01:17.567
+four cells into the second bin.
+
+00:01:17.652 --> 00:01:21.054
+This final visual makes it
+easy to spot patterns and
+
+00:01:21.134 --> 00:01:26.496
+see which temperature ranges
+are most common in the simulation.
+
+00:01:29.059 --> 00:01:31.732
+Let's begin by writing our
+kernel signature.
+
+00:01:31.801 --> 00:01:34.889
+Since our histogram only
+needs one dimension, MD-SPAN
+
+00:01:34.903 --> 00:01:36.386
+would be an overkill.
+
+00:01:36.444 --> 00:01:39.628
+Instead, we can use SPAN,
+which is essentially a
+
+00:01:39.646 --> 00:01:42.037
+one-dimensional MD-SPAN.
+
+00:01:42.128 --> 00:01:45.490
+In CUDA, just like in C++,
+SPAN is preferred over raw
+
+00:01:45.550 --> 00:01:48.933
+pointers because it's safer,
+helps prevent common pointer
+
+00:01:49.013 --> 00:01:52.208
+errors while remaining lightweight.
+
+00:01:52.335 --> 00:01:55.237
+To construct a SPAN, it's
+sufficient to pass a raw
+
+00:01:55.297 --> 00:01:57.479
+pointer and a size.
+
+00:01:57.580 --> 00:02:01.869
+Then we can use square brackets
+to access underlying elements.
+
+00:02:01.961 --> 00:02:06.002
+Span also provides a size member
+function which returns the total
+
+00:02:06.042 --> 00:02:08.328
+number of elements in the span.
+
+00:02:08.443 --> 00:02:11.003
+With both the temperature
+and histogram passed into
+
+00:02:11.043 --> 00:02:14.604
+our kernel, we'll use the
+already familiar thread index
+
+00:02:14.644 --> 00:02:20.009
+computation scheme to assign
+exactly one cell per each thread.
+
+00:02:20.125 --> 00:02:23.146
+Next each thread loads its
+corresponding temperature value
+
+00:02:23.226 --> 00:02:27.227
+and divides it by the bin width
+to find the the correct bin index.
+
+00:02:27.327 --> 00:02:30.269
+In a production environment, you'd
+also want to ensure that this
+
+00:02:30.349 --> 00:02:32.424
+memory access is within bounds.
+
+00:02:32.470 --> 00:02:35.392
+For simplicity, we'll skip
+the boundary check and rely
+
+00:02:35.492 --> 00:02:39.548
+on problem sizes that are multiples
+of the block size instead.
+
+00:02:39.614 --> 00:02:42.716
+Next, each thread reads the
+current count from its assigned
+
+00:02:42.756 --> 00:02:47.616
+bin, increments that value, and
+writes it back to the histogram.
+
+00:02:47.739 --> 00:02:49.894
+But it looks like
+something went wrong.
+
+00:02:49.940 --> 00:02:52.681
+We have around four million
+cells in the grid, so we'd
+
+00:02:52.721 --> 00:02:56.268
+expect the histogram bars
+to sum to four million.
+
+00:02:56.365 --> 00:02:58.250
+But the histogram looks empty.
+
+00:02:58.307 --> 00:03:00.056
+What happened?
+
+00:03:00.189 --> 00:03:03.652
+The issue is that our kernel has
+a data race in the highlighted
+
+00:03:03.712 --> 00:03:05.581
+lines of the code.
+
+00:03:05.674 --> 00:03:08.722
+All those millions of threads
+are reading and writing the
+
+00:03:08.736 --> 00:03:10.505
+same memory location.
+
+00:03:10.558 --> 00:03:12.375
+Let's break this down.
+
+00:03:12.480 --> 00:03:14.459
+Say we have only two threads.
+
+00:03:14.522 --> 00:03:19.084
+They start by issuing a
+memory read request.
+
+00:03:20.359 --> 00:03:25.825
+Let's say memory read from the
+first thread arrives first.
+
+00:03:26.641 --> 00:03:29.874
+Then memory responds with
+the current value stored in
+
+00:03:29.894 --> 00:03:33.461
+the histogram, which is zero.
+
+00:03:35.029 --> 00:03:39.036
+Now, old counter stores zero.
+
+00:03:40.071 --> 00:03:44.965
+Then, first thread increments
+0, new value stores 1.
+
+00:03:46.610 --> 00:03:51.826
+All while the second thread
+starts reading zero from memory.
+
+00:03:53.045 --> 00:03:57.803
+Now, second threads local
+variables store zero as well.
+
+00:03:58.766 --> 00:04:02.409
+Second thread then increments its
+local counter while first thread
+
+00:04:02.429 --> 00:04:06.451
+starts writing new value in memory.
+
+00:04:07.822 --> 00:04:11.473
+This write overwrites previous
+value in the histogram,
+
+00:04:11.514 --> 00:04:14.437
+which now stores 1.
+
+00:04:15.931 --> 00:04:20.179
+But the second thread
+is doing the same.
+
+00:04:21.667 --> 00:04:25.521
+So, in our kernel, we lose
+most of the increments.
+
+00:04:25.590 --> 00:04:28.147
+Now imagine this happening
+with millions of threads,
+
+00:04:28.171 --> 00:04:32.514
+and it should make it clear why
+our final histogram appeared empty.
+
+00:04:32.594 --> 00:04:36.800
+We simply lost most of the
+counters because of this data race.
+
+00:04:36.917 --> 00:04:40.339
+To fix this race, we need to
+ensure the read, modify, write
+
+00:04:40.379 --> 00:04:44.557
+sequence is treated as a single,
+indivisible memory operation.
+
+00:04:44.622 --> 00:04:48.142
+In C++, these operations are
+known as atomics.
+
+00:04:48.204 --> 00:04:49.852
+You can think of an atomic
+
+00:04:49.893 --> 00:04:54.993
+as storing the instruction
+itself, rather than just bytes.
+
+00:04:55.115 --> 00:04:59.527
+In the example on the right,
+we store plus one into memory,
+
+00:04:59.597 --> 00:05:03.219
+and when that operation arrives
+on memory, it reads the current
+
+00:05:03.259 --> 00:05:06.441
+value, increments it, and
+writes back the result in one
+
+00:05:06.481 --> 00:05:12.226
+step, preventing any other thread
+from interfering in the meantime.
+
+00:05:12.403 --> 00:05:16.855
+CUDA provides a type called
+CUDA std atomic ref.
+
+00:05:16.926 --> 00:05:19.407
+Which lets you treat any
+existing memory location
+
+00:05:19.467 --> 00:05:21.264
+as an atomic variable.
+
+00:05:21.348 --> 00:05:25.230
+Here we create an atomic reference
+to count zero by wrapping
+
+00:05:25.291 --> 00:05:28.009
+it into AtomicRef.
+
+00:05:28.132 --> 00:05:32.214
+Which then provides us with
+various atomic functions available
+
+00:05:32.254 --> 00:05:33.861
+on this reference.
+
+00:05:33.955 --> 00:05:38.177
+For instance, we can atomically
+add or subtract a value from
+
+00:05:38.257 --> 00:05:39.732
+this memory location.
+
+00:05:39.778 --> 00:05:43.260
+And each of these operations
+appear as a single indivisible
+
+00:05:43.320 --> 00:05:45.277
+step to all threads.
+
+00:05:45.339 --> 00:05:49.232
+Let's see how this type can
+help fix our kernel.
+
+00:05:49.367 --> 00:05:53.973
+Now both threads issue
+atomic increment.
+
+00:05:55.094 --> 00:05:59.464
+First threads fetch,
+add arrives first.
+
+00:06:00.492 --> 00:06:03.387
+The question mark in the atomic
+operation is replaced with
+
+00:06:03.407 --> 00:06:06.532
+the current value of the bin.
+
+00:06:07.369 --> 00:06:10.508
+Then it adds one and stores
+the result back into memory.
+
+00:06:10.557 --> 00:06:14.161
+Now our histogram stores one.
+
+00:06:15.441 --> 00:06:19.993
+The second thread's atomic
+increment arrives second.
+
+00:06:21.058 --> 00:06:23.668
+And now its question mark
+is replaced with the current
+
+00:06:23.708 --> 00:06:28.318
+value of the histogram, which
+ends up being one.
+
+00:06:29.645 --> 00:06:33.909
+Now we add 1 to 1 and store
+2 back into memory.
+
+00:06:33.951 --> 00:06:37.379
+And as you can see, the memory
+now stores the current result
+
+00:06:37.416 --> 00:06:40.081
+and no increment is lost.
+
+00:06:40.220 --> 00:06:43.722
+In the section exercise, you'll
+have to fix the data race
+
+00:06:43.745 --> 00:06:46.729
+in the histogram kernel by
+using atomic references.
+

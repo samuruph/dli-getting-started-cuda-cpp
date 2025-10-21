@@ -1,0 +1,286 @@
+WEBVTT
+
+00:00:01.258 --> 00:00:04.160
+Up to this point, we have
+focused on optimizing our
+
+00:00:04.220 --> 00:00:06.902
+temperature simulation by
+cutting out unnecessary reads
+
+00:00:06.962 --> 00:00:11.857
+and writes, ultimately harnessing
+the GPU's massive parallelism.
+
+00:00:11.945 --> 00:00:16.009
+Now let's take a quick look at the
+overall structure of our simulator.
+
+00:00:16.088 --> 00:00:20.731
+Here we initialize a PREV
+buffer and a NEXT buffer, store
+
+00:00:20.751 --> 00:00:24.983
+data on disk, and then perform
+several simulation steps in a loop.
+
+00:00:25.074 --> 00:00:28.986
+Everything seems straightforward
+except for one puzzling detail.
+
+00:00:29.068 --> 00:00:32.770
+Each time we store the data,
+our next computations slow
+
+00:00:32.810 --> 00:00:35.927
+down, sometimes by a factor of 100.
+
+00:00:36.052 --> 00:00:40.074
+That's a massive performance
+drop, and it suggests something
+
+00:00:40.094 --> 00:00:45.254
+else is at play besides our fancy
+iterators or algorithm design.
+
+00:00:45.356 --> 00:00:51.899
+This hints at a deeper concern
+related to memory spaces.
+
+00:00:52.850 --> 00:00:56.092
+Recall our illustration regarding
+the bandwidth differences
+
+00:00:56.172 --> 00:00:58.231
+between CPUs and GPUs.
+
+00:00:58.293 --> 00:01:01.755
+GPUs can handle much higher
+data throughput because they
+
+00:01:01.795 --> 00:01:05.677
+have their own dedicated memory
+that is specifically architected
+
+00:01:05.777 --> 00:01:07.948
+for massive bandwidth.
+
+00:01:08.018 --> 00:01:12.551
+Previously, we distinguished host
+and device execution spaces to know
+
+00:01:12.561 --> 00:01:15.196
+where code actually was running.
+
+00:01:15.282 --> 00:01:18.144
+To get better performance,
+we also have to distinguish
+
+00:01:18.184 --> 00:01:20.584
+host and device memory spaces.
+
+00:01:20.649 --> 00:01:24.105
+In other words, where the
+bytes of data live.
+
+00:01:24.192 --> 00:01:26.071
+But that raises a question.
+
+00:01:26.133 --> 00:01:29.449
+How did our simulator run on
+the GPU in the first place?
+
+00:01:29.496 --> 00:01:35.714
+We haven't done anything special
+to allocate device memory, have we?
+
+00:01:35.921 --> 00:01:37.902
+Well, we sort of did.
+
+00:01:37.942 --> 00:01:41.903
+Earlier, we switched from STD
+vector to thrust universal vector.
+
+00:01:41.945 --> 00:01:44.347
+This container uses managed memory.
+
+00:01:44.392 --> 00:01:49.676
+A technology that makes the CPU and
+GPU seem to share the same memory.
+
+00:01:49.734 --> 00:01:52.796
+Under the hood, though,
+the CPU and GPU still have
+
+00:01:52.896 --> 00:01:54.740
+separate memory spaces.
+
+00:01:54.817 --> 00:01:58.959
+Whenever the CPU or GPU
+accesses data, CUDA silently
+
+00:01:59.019 --> 00:02:02.028
+transfers the data to the
+location where it's needed.
+
+00:02:02.080 --> 00:02:04.383
+In effect, a universal vector.
+
+00:02:04.428 --> 00:02:08.016
+CUDA keeps two copies of the
+same data, one for the CPU
+
+00:02:08.030 --> 00:02:10.151
+and one for the GPU.
+
+00:02:10.251 --> 00:02:14.333
+If the CPU reads or writes to
+the vector, CUDA invalidates
+
+00:02:14.393 --> 00:02:17.055
+the GPU copy and vice versa.
+
+00:02:17.115 --> 00:02:20.643
+This saves us from writing
+explicit copy calls, but it
+
+00:02:20.657 --> 00:02:22.944
+also has a performance cost.
+
+00:02:23.018 --> 00:02:26.320
+Let's go back to our sudden
+slowdown and see how this
+
+00:02:26.400 --> 00:02:31.056
+hidden data transfer explains
+performance Aggression.
+
+00:02:31.167 --> 00:02:34.389
+Imagine the data is in the
+device memory when we call
+
+00:02:34.449 --> 00:02:36.916
+a store on the CPU.
+
+00:02:36.990 --> 00:02:40.492
+Because the CPU needs the
+data, CUDA first copies it
+
+00:02:40.552 --> 00:02:43.565
+from the device to the host memory.
+
+00:02:43.674 --> 00:02:48.374
+Once store finishes, we launch
+the next GPU computation step.
+
+00:02:48.417 --> 00:02:52.419
+But now the host copy is valid,
+while the GPU copy is out
+
+00:02:52.459 --> 00:02:57.230
+of date, so CUDA has to copy
+the data back to the device.
+
+00:02:57.318 --> 00:03:01.657
+That's why the first simulation
+step after storing takes so long.
+
+00:03:01.701 --> 00:03:07.406
+It includes the hidden cost of
+moving data back onto the GPU.
+
+00:03:07.565 --> 00:03:11.347
+To solve our performance problem,
+we can make this GPU and CPU
+
+00:03:11.407 --> 00:03:13.500
+transfers explicit.
+
+00:03:13.569 --> 00:03:16.931
+Thrust offers different containers
+so you can decide where your
+
+00:03:16.951 --> 00:03:18.309
+data should live.
+
+00:03:18.372 --> 00:03:21.974
+Thrust host vector allocates
+host memory space, so
+
+00:03:22.014 --> 00:03:25.736
+it's only accessible in
+the host execution space.
+
+00:03:25.814 --> 00:03:30.528
+Thrust device vector allocates
+device memory space, so
+
+00:03:30.549 --> 00:03:34.061
+it's only accessible in
+the device execution space.
+
+00:03:34.133 --> 00:03:37.015
+It's important to note that
+both vectors have to be
+
+00:03:37.055 --> 00:03:39.337
+constructed on the host.
+
+00:03:39.416 --> 00:03:42.998
+Anyways, by choosing the
+right container, we avoid
+
+00:03:43.038 --> 00:03:47.007
+the hidden back and forth
+transfers of managed memory.
+
+00:03:47.100 --> 00:03:52.202
+That way, we only move data across
+the CPU-GPU boundary when we decide
+
+00:03:52.242 --> 00:03:57.568
+it's necessary, which helps keep
+the performance more predictable.
+
+00:03:57.705 --> 00:04:01.923
+We can handle the data transfers
+ourselves by using thrust copy.
+
+00:04:01.974 --> 00:04:06.370
+which has the same interface as
+the standard library's STD copy.
+
+00:04:06.437 --> 00:04:09.379
+This way, we know exactly
+when data is crossing the
+
+00:04:09.399 --> 00:04:14.885
+CPU-GPU boundary, and we can
+control it for optimal performance.
+
+00:04:15.042 --> 00:04:18.014
+Now we come to our
+exercise in this section.
+
+00:04:18.064 --> 00:04:21.166
+This time, we'll move away
+from universal vector, and
+
+00:04:21.226 --> 00:04:24.716
+instead use separate device
+and host containers.
+
+00:04:24.809 --> 00:04:28.273
+You'll need to allocate a
+host vector to hold the copy
+
+00:04:28.291 --> 00:04:30.329
+of data for CPU space.
+
+00:04:30.396 --> 00:04:34.481
+And use thrust copy to transfer
+that between the device
+
+00:04:34.561 --> 00:04:35.682
+and host as needed.
+

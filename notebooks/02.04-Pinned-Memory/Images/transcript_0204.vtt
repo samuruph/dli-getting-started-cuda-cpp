@@ -1,0 +1,198 @@
+WEBVTT
+
+00:00:00.925 --> 00:00:03.868
+After looking at the insight
+profile in the last section, we
+
+00:00:03.888 --> 00:00:05.859
+have both good news and bad news.
+
+00:00:05.909 --> 00:00:08.411
+The good news is that our
+intuition about the cost of
+
+00:00:08.431 --> 00:00:10.389
+data transfers was correct.
+
+00:00:10.433 --> 00:00:13.396
+The device-to-device copy
+on the left is significantly
+
+00:00:13.436 --> 00:00:16.580
+faster than the device-to-host
+copy in the middle.
+
+00:00:16.638 --> 00:00:21.023
+This confirms that the PCIe
+transfer is the real bottleneck.
+
+00:00:21.082 --> 00:00:25.306
+The bad news is that, despite using
+separate systems, compute is still
+
+00:00:25.346 --> 00:00:27.119
+waiting for the copy to finish.
+
+00:00:27.167 --> 00:00:28.652
+That seems puzzling.
+
+00:00:28.700 --> 00:00:31.062
+Didn't we just separate them
+into different streams to
+
+00:00:31.102 --> 00:00:33.393
+avoid this serialization?
+
+00:00:33.464 --> 00:00:36.416
+It turns out this isn't
+entirely bad news.
+
+00:00:36.466 --> 00:00:41.267
+It means that there's more to learn
+about how the GPU hardware works.
+
+00:00:41.410 --> 00:00:44.442
+To understand why our copy
+and compute operations didn't
+
+00:00:44.452 --> 00:00:48.229
+overlap, we need to look at
+how memory actually works.
+
+00:00:48.295 --> 00:00:52.044
+Your program uses virtual memory,
+which is divided into pages.
+
+00:00:52.096 --> 00:00:55.567
+Most of the time, these pages
+are backed by physical RAM.
+
+00:00:55.618 --> 00:00:59.639
+But if RAM is short on space,
+the operating system can swap
+
+00:00:59.679 --> 00:01:01.748
+pages out to disk.
+
+00:01:01.840 --> 00:01:05.142
+As a result, at any given
+moment, you can't be entirely
+
+00:01:05.182 --> 00:01:09.959
+certain whether a particular
+page is in RAM or on disk.
+
+00:01:10.044 --> 00:01:13.511
+To make sure a page remains
+in physical memory, we can
+
+00:01:13.525 --> 00:01:15.572
+page lock or pin it.
+
+00:01:15.646 --> 00:01:18.507
+By pinning pages, we tell
+the operating system it's
+
+00:01:18.567 --> 00:01:21.978
+not allowed to move them to disk.
+
+00:01:22.193 --> 00:01:24.796
+So how does this relate to GPUs?
+
+00:01:24.874 --> 00:01:29.569
+As it turns out, a GPU
+can only read from pinned,
+
+00:01:29.615 --> 00:01:31.658
+page-locked memory.
+
+00:01:31.756 --> 00:01:33.498
+That raises a question, though.
+
+00:01:33.537 --> 00:01:36.898
+We haven't done anything special
+when transferring data between
+
+00:01:36.918 --> 00:01:41.757
+the CPU and GPU, so how did
+that work up until now?
+
+00:01:41.919 --> 00:01:45.874
+Behind the scenes, the CUDA
+runtime uses a small pinned buffer
+
+00:01:45.920 --> 00:01:48.511
+as a staging area for transfers.
+
+00:01:48.581 --> 00:01:51.586
+When we copy data from
+regular pageable memory,
+
+00:01:51.636 --> 00:01:55.782
+The driver moves a chunk of
+data into this staging buffer,
+
+00:01:55.839 --> 00:02:00.619
+sends that chunk to the GPU, waits
+for it to finish, and then repeats.
+
+00:02:00.681 --> 00:02:05.144
+This process effectively makes
+the copy synchronous, blocking any
+
+00:02:05.224 --> 00:02:08.025
+chance of overlap with computation.
+
+00:02:08.106 --> 00:02:11.608
+The good news is we can avoid
+this by allocating pinned
+
+00:02:11.648 --> 00:02:13.235
+memory ourselves.
+
+00:02:13.309 --> 00:02:16.691
+In Thrust, this is as simple
+as using a universal host
+
+00:02:16.751 --> 00:02:20.386
+pinned vector instead of a
+regular host vector.
+
+00:02:20.472 --> 00:02:24.676
+By doing so, we bypass the
+hidden staging step and enable
+
+00:02:24.756 --> 00:02:30.158
+truly asynchronous transfers that
+can overlap with our GPU workloads.
+
+00:02:30.301 --> 00:02:33.824
+Which brings us to the next
+optional exercise that you'll
+
+00:02:33.884 --> 00:02:35.659
+find in this section.
+
+00:02:35.726 --> 00:02:39.529
+In this exercise, you'll allocate
+pinned memory by using a universal
+
+00:02:39.569 --> 00:02:43.466
+host pinned vector Instead
+of a regular host vector,
+
+00:02:43.544 --> 00:02:45.925
+After making that change,
+you can run your application
+
+00:02:45.985 --> 00:02:49.707
+under Insight Systems again
+and look for the device to
+
+00:02:49.747 --> 00:02:52.130
+host copy in the timeline.
+
+00:02:52.208 --> 00:02:55.170
+Observe if it now
+overlaps with Compute.
+

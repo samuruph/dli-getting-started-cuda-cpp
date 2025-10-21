@@ -1,0 +1,923 @@
+WEBVTT
+
+00:00:01.290 --> 00:00:04.654
+What if your problem does not
+conform to a standard use case?
+
+00:00:04.712 --> 00:00:07.650
+Let's say we want to compute
+the maximum difference between
+
+00:00:07.675 --> 00:00:09.359
+old and new temperatures.
+
+00:00:09.416 --> 00:00:13.307
+For instance, the first object
+cooled from 42 to 31 degrees,
+
+00:00:13.339 --> 00:00:17.302
+which is an 11 degree change,
+but the last one cooled from 50
+
+00:00:17.302 --> 00:00:20.252
+to 35, a difference of 15 degrees.
+
+00:00:20.304 --> 00:00:23.534
+So the maximum
+difference is 15 degrees.
+
+00:00:23.646 --> 00:00:26.685
+There's no standard algorithm
+for computing this though.
+
+00:00:26.734 --> 00:00:29.501
+A naive approach would be
+to compute each stage of the
+
+00:00:29.582 --> 00:00:32.785
+algorithm as illustrated.
+
+00:00:33.100 --> 00:00:36.688
+To do this, we start by creating
+a vector for differences.
+
+00:00:36.743 --> 00:00:42.078
+Then we use the version of thrust
+transform to take two input ranges,
+
+00:00:42.146 --> 00:00:45.350
+one for the old temperatures
+and one for the new temperatures.
+
+00:00:45.409 --> 00:00:49.551
+Our operation, a lambda or a
+function object, now receives two
+
+00:00:49.611 --> 00:00:53.554
+parameters, one from each range,
+computes the absolute difference
+
+00:00:53.594 --> 00:00:59.497
+between them, and writes the
+result into the differences vector.
+
+00:01:00.069 --> 00:01:04.636
+Lastly, we run a max reduction
+on the differences vector to find
+
+00:01:04.676 --> 00:01:06.790
+the maximum absolute difference.
+
+00:01:06.839 --> 00:01:12.545
+This code will produce the correct
+result, but is it efficient?
+
+00:01:13.171 --> 00:01:15.938
+To answer this question,
+let's recap the key steps
+
+00:01:15.952 --> 00:01:17.172
+of this algorithm.
+
+00:01:17.212 --> 00:01:21.512
+It starts with an allocation,
+which is already suboptimal.
+
+00:01:21.593 --> 00:01:25.741
+After that, it transforms two
+input ranges into differences.
+
+00:01:25.813 --> 00:01:28.554
+To build an intuition for
+this step, you can consider
+
+00:01:28.594 --> 00:01:31.938
+the transformation as a
+for loop shown here.
+
+00:01:32.055 --> 00:01:35.915
+Inside this loop, we read two
+elements, one from A and one from
+
+00:01:35.955 --> 00:01:40.249
+B. We then compute the difference
+and write it back into memory.
+
+00:01:40.327 --> 00:01:43.050
+Overall this step reads
+two N elements and
+
+00:01:43.110 --> 00:01:45.382
+writes N elements back.
+
+00:01:45.473 --> 00:01:50.037
+The subsequent reduction step can
+be represented as another for loop.
+
+00:01:50.118 --> 00:01:53.462
+Here it reads one element from the
+difference array, checks if the
+
+00:01:53.522 --> 00:01:57.907
+newly read value is larger Then the
+current max value and updates the
+
+00:01:57.967 --> 00:02:01.729
+current max value if it's the case.
+
+00:02:03.559 --> 00:02:07.382
+Overall, this approach leads
+to 3n reads, where n is the
+
+00:02:07.422 --> 00:02:09.039
+size of the input sequence.
+
+00:02:09.084 --> 00:02:11.619
+It also writes back n elements.
+
+00:02:11.686 --> 00:02:14.368
+The question is, if you had
+to implement this algorithm
+
+00:02:14.468 --> 00:02:19.070
+with just 4 loops, would you
+write it this way?
+
+00:02:19.400 --> 00:02:22.623
+To make this more efficient,
+we can rewrite the logic using
+
+00:02:22.663 --> 00:02:24.464
+a single reduction loop.
+
+00:02:24.524 --> 00:02:28.291
+Instead of computing all the
+absolute differences ahead of time,
+
+00:02:28.327 --> 00:02:32.201
+we can calculate them on the fly
+as we iterate through the elements
+
+00:02:32.211 --> 00:02:37.704
+of A and B and immediately compare
+each result to the current maximum.
+
+00:02:37.815 --> 00:02:41.779
+This approach only reads two
+N elements, each element of
+
+00:02:41.799 --> 00:02:47.679
+A and B once, and avoids any
+extra memory allocations.
+
+00:02:47.779 --> 00:02:52.301
+Since it cuts memory accesses in
+half, we'd expect a noticeable
+
+00:02:52.381 --> 00:02:54.125
+performance gain.
+
+00:02:54.221 --> 00:02:59.107
+So the natural question is,
+how can we implement this
+
+00:02:59.143 --> 00:03:03.798
+on-the-fly computation using
+a parallel algorithm?
+
+00:03:03.885 --> 00:03:07.139
+And which parallel
+algorithm should we use?
+
+00:03:07.206 --> 00:03:10.039
+Thankfully, this part
+is straightforward.
+
+00:03:10.087 --> 00:03:14.556
+Our loop already behaves like
+a standard reduction, except
+
+00:03:14.568 --> 00:03:16.968
+we're reducing absolute differences
+
+00:03:17.011 --> 00:03:18.970
+rather than raw values.
+
+00:03:19.053 --> 00:03:23.116
+That means the right tool
+is Thrust Reduce.
+
+00:03:23.237 --> 00:03:26.788
+But how do we plug the
+absolute difference logic
+
+00:03:26.821 --> 00:03:29.056
+into Thrust Reduce?
+
+00:03:29.143 --> 00:03:32.473
+The answer lies in iterators.
+
+00:03:32.566 --> 00:03:35.669
+And if you're not familiar
+with them yet, don't worry,
+
+00:03:35.729 --> 00:03:39.050
+we'll cover the essentials
+
+00:03:40.831 --> 00:03:43.812
+The simplest way to understand
+iterators is to start with
+
+00:03:43.852 --> 00:03:45.939
+something familiar, pointers.
+
+00:03:46.013 --> 00:03:48.904
+In this example, we allocate
+the array with three elements,
+
+00:03:48.934 --> 00:03:52.149
+then create a pointer that
+points to the first element.
+
+00:03:52.216 --> 00:03:56.698
+Using the subscript operator,
+brackets, we can access elements of
+
+00:03:56.718 --> 00:04:00.535
+the array through the pointer, just
+like we would with a regular array.
+
+00:04:00.579 --> 00:04:03.840
+This works because pointers
+act as basic iterators over
+
+00:04:03.880 --> 00:04:06.923
+a sequence of values in memory.
+
+00:04:07.102 --> 00:04:10.391
+Here's a simple mental model
+for understanding pointers.
+
+00:04:10.444 --> 00:04:13.785
+A pointer stores a memory
+address, the location of some
+
+00:04:13.845 --> 00:04:16.079
+data in physical memory.
+
+00:04:16.166 --> 00:04:18.967
+In addition to storing that
+address, pointers provide
+
+00:04:19.007 --> 00:04:22.469
+an array-like interface for
+accessing the data.
+
+00:04:22.548 --> 00:04:26.229
+For example, accessing index
+0 through a pointer gives
+
+00:04:26.249 --> 00:04:30.690
+you the first element, index
+1 gives you the second, and so on.
+
+00:04:30.750 --> 00:04:36.251
+Each step moves through memory
+based on the data type's size.
+
+00:04:37.907 --> 00:04:41.111
+But the subscript operator isn't
+limited to pointers and arrays.
+
+00:04:41.150 --> 00:04:43.812
+If you think about how we
+access elements in thrust
+
+00:04:43.852 --> 00:04:48.541
+vector or std vector, we use
+the same square bracket notation.
+
+00:04:48.616 --> 00:04:49.991
+Why does that work?
+
+00:04:50.037 --> 00:04:54.615
+Because in C++ we can define the
+subscript operator, the brackets,
+
+00:04:54.661 --> 00:04:56.644
+just like any other function.
+
+00:04:56.703 --> 00:05:01.167
+In other words, when you write
+vector at index 42, 42 is
+
+00:05:01.227 --> 00:05:04.914
+passed as a parameter to the
+subscript operator function
+
+00:05:04.950 --> 00:05:06.639
+inside the vector class.
+
+00:05:06.698 --> 00:05:10.650
+This flexibility allows us to give
+many objects pointer-like behavior,
+
+00:05:10.693 --> 00:05:14.820
+which brings us to iterators.
+
+00:05:15.140 --> 00:05:19.181
+Since we can put any code in
+the subscript operator, we don't
+
+00:05:19.221 --> 00:05:23.246
+have to limit ourselves to the
+concept of physical memory at all.
+
+00:05:23.323 --> 00:05:27.424
+For example, imagine a type
+whose subscript operator just
+
+00:05:27.484 --> 00:05:30.657
+returns whatever index you pass in.
+
+00:05:30.705 --> 00:05:33.741
+Pass it 42, you get 42.
+
+00:05:33.826 --> 00:05:37.327
+That might seem pointless
+at first, but by the end of
+
+00:05:37.367 --> 00:05:43.128
+this course, this little trick will
+become one of your best friends.
+
+00:05:43.732 --> 00:05:47.375
+So now let's compare the
+pointer-based code on the left
+
+00:05:47.435 --> 00:05:50.283
+with our custom type on the right.
+
+00:05:50.378 --> 00:05:54.703
+When we pass in an index
+of 0, both print 0.
+
+00:05:54.782 --> 00:05:59.780
+When we pass in an index of
+1, both print 1, and so on.
+
+00:05:59.847 --> 00:06:02.126
+Functionally,
+there's no difference.
+
+00:06:02.189 --> 00:06:06.453
+But because a pointer is tied to
+actual physical memory, every time
+
+00:06:06.513 --> 00:06:10.906
+you use the subscript operator,
+you're performing a memory access.
+
+00:06:11.001 --> 00:06:16.913
+That means if you read N elements,
+you'll have N memory accesses.
+
+00:06:17.003 --> 00:06:21.725
+Our custom type, on the other hand,
+simply returns the index you passed
+
+00:06:21.825 --> 00:06:25.340
+in with no memory access at all.
+
+00:06:25.407 --> 00:06:29.954
+In theory, that can give much
+better performance.
+
+00:06:30.049 --> 00:06:34.436
+And from the algorithm's point of
+view, notice how both interfaces
+
+00:06:34.450 --> 00:06:36.479
+look exactly the same.
+
+00:06:36.531 --> 00:06:39.620
+We just use square brackets.
+
+00:06:39.753 --> 00:06:43.638
+Whether those brackets trigger
+a memory read or simply return
+
+00:06:43.699 --> 00:06:47.113
+the index doesn't matter for
+the rest of the code.
+
+00:06:47.163 --> 00:06:53.089
+And that's a key concept behind
+how iterators work.
+
+00:06:53.885 --> 00:06:57.380
+You can think of iterators as
+a generalization of pointers.
+
+00:06:57.426 --> 00:07:00.607
+They provide the same interface,
+think subscript operator,
+
+00:07:00.627 --> 00:07:03.588
+increment, et cetera, but
+they are not limited to
+
+00:07:03.608 --> 00:07:05.516
+actual memory accesses.
+
+00:07:05.589 --> 00:07:09.858
+The type we just explored is
+called a counting iterator.
+
+00:07:09.930 --> 00:07:12.575
+It presents an infinite
+sequence of integers without
+
+00:07:12.591 --> 00:07:14.437
+allocating a single byte.
+
+00:07:14.511 --> 00:07:18.731
+Here's its code just to help build
+a mental model, but you won't
+
+00:07:18.753 --> 00:07:20.651
+ever need to write one yourself.
+
+00:07:20.693 --> 00:07:24.107
+It's the concept that's important.
+
+00:07:24.298 --> 00:07:26.780
+The counting iterator we
+just saw doesn't make any
+
+00:07:26.840 --> 00:07:30.323
+memory accesses, but not
+every iterator works that way.
+
+00:07:30.364 --> 00:07:33.867
+For example, imagine a transform
+iterator that references an
+
+00:07:33.967 --> 00:07:35.616
+underlying pointer.
+
+00:07:35.688 --> 00:07:38.951
+Every time you call its subscript
+operator, instead of returning
+
+00:07:38.991 --> 00:07:42.282
+the original element directly,
+it might multiply that element
+
+00:07:42.294 --> 00:07:44.714
+by 2 before giving it back.
+
+00:07:44.797 --> 00:07:48.251
+From the outside, it looks like
+the entire sequence was scaled.
+
+00:07:48.300 --> 00:07:51.340
+If you look at index 1, you get 2.
+
+00:07:51.494 --> 00:07:55.075
+Even though the underlying
+data still stores one.
+
+00:07:55.155 --> 00:07:57.416
+Notice that the result
+of the multiplication
+
+00:07:57.436 --> 00:07:58.966
+isn't stored anywhere.
+
+00:07:59.016 --> 00:08:03.745
+It's computed on the fly each
+time you access an element.
+
+00:08:03.917 --> 00:08:08.059
+We can take this even further by
+implementing a zip iterator that
+
+00:08:08.119 --> 00:08:10.921
+references two sequences at once.
+
+00:08:10.999 --> 00:08:15.101
+Its subscript operator returns
+a tuple containing one element
+
+00:08:15.181 --> 00:08:16.785
+from each sequence.
+
+00:08:16.861 --> 00:08:21.360
+So if we access the iterator
+at index zero, We might get
+
+00:08:21.491 --> 00:08:26.276
+05, which corresponds
+exactly to A0 and B0.
+
+00:08:27.890 --> 00:08:32.332
+The real power of these so-called
+fancy iterators shows up when
+
+00:08:32.372 --> 00:08:34.230
+we start combining them.
+
+00:08:34.292 --> 00:08:37.341
+For example, imagine a
+transform iterator that
+
+00:08:37.353 --> 00:08:39.872
+uses a zip iterator inside.
+
+00:08:39.934 --> 00:08:44.136
+Each time you call its subscript
+operator with index i, it
+
+00:08:44.196 --> 00:08:47.317
+first fetches two values,
+one from sequence A and one from
+
+00:08:47.357 --> 00:08:51.726
+sequence B, then computes their
+absolute difference and returns it.
+
+00:08:51.799 --> 00:08:56.172
+That's exactly what we needed for
+our maximum difference algorithm.
+
+00:08:56.243 --> 00:09:00.685
+If we pass the transformed zip
+iterator to a reduction algorithm,
+
+00:09:00.728 --> 00:09:04.491
+it'll treat it just like a regular
+pointer and read values as usual.
+
+00:09:04.532 --> 00:09:08.045
+But under the hood, every
+access fetches two elements,
+
+00:09:08.056 --> 00:09:11.224
+computes the absolute difference,
+and hands it over.
+
+00:09:11.319 --> 00:09:13.722
+All of that without
+writing those intermediate
+
+00:09:13.742 --> 00:09:16.903
+differences back to memory.
+
+00:09:17.611 --> 00:09:21.038
+In reality, production-grade
+iterator implementations are
+
+00:09:21.054 --> 00:09:24.340
+much more complex than these
+simplified examples.
+
+00:09:24.417 --> 00:09:27.235
+Luckily, you don't have to
+build them yourself.
+
+00:09:27.299 --> 00:09:31.298
+Thrust already provides a variety
+of ready-to-use iterators,
+
+00:09:31.343 --> 00:09:34.586
+including counting zip and
+transform iterators.
+
+00:09:34.685 --> 00:09:39.018
+Let's take a look at how to
+work with those in practice.
+
+00:09:39.169 --> 00:09:42.652
+Thrust makeCountingIterator
+takes an integer that tells
+
+00:09:42.692 --> 00:09:44.341
+it where to start counting.
+
+00:09:44.394 --> 00:09:48.807
+For example, in this code, we
+pass it into thrust for each
+
+00:09:48.858 --> 00:09:51.585
+to print out the first 42 elements.
+
+00:09:51.660 --> 00:09:55.503
+If we create a counting iterator
+that starts at 1, the output will
+
+00:09:55.543 --> 00:09:59.940
+be 1, 2, 3, and so on up to 42.
+
+00:10:00.147 --> 00:10:05.293
+Thrust make transform iterator
+takes two inputs, an iterator
+
+00:10:05.331 --> 00:10:09.180
+to your underlying data and
+a transformation function
+
+00:10:09.194 --> 00:10:10.992
+to apply to each element.
+
+00:10:11.052 --> 00:10:14.134
+For example, suppose we have
+a thrust vector containing
+
+00:10:14.174 --> 00:10:17.744
+a sequence like 1, 2, 3.
+
+00:10:17.917 --> 00:10:21.563
+We pass the beginning of the
+vector as the first argument
+
+00:10:21.619 --> 00:10:25.884
+and a function that doubles
+each value as the second.
+
+00:10:25.982 --> 00:10:30.752
+When we iterate over the resulting
+transform iterator, each element
+
+00:10:30.766 --> 00:10:34.562
+is automatically multiplied
+Divided by two on the fly.
+
+00:10:34.648 --> 00:10:37.950
+So if the original data was
+one, two, three, four, the
+
+00:10:37.990 --> 00:10:41.645
+transform iterator yields
+two, four, six, eight.
+
+00:10:41.712 --> 00:10:46.664
+Importantly, these transform
+values are not stored in memory.
+
+00:10:46.714 --> 00:10:52.496
+They're computed dynamically
+whenever the iterator is accessed.
+
+00:10:52.717 --> 00:10:57.025
+Now let's take a look at an example
+using thrust make zip iterator.
+
+00:10:57.080 --> 00:11:00.103
+We have two thrust
+vectors, A and B.
+
+00:11:00.182 --> 00:11:05.075
+The first one holds 0, 1, 2
+and the second holds 5, 4, 2.
+
+00:11:05.244 --> 00:11:12.072
+We then call thrust, make
+zip iterator A begin, B begin
+
+00:11:12.186 --> 00:11:16.065
+to create an iterator that pairs
+up elements from both vectors.
+
+00:11:16.107 --> 00:11:20.149
+The element at index zero of
+A is zipped with the element
+
+00:11:20.209 --> 00:11:23.832
+at index zero of B and so on.
+
+00:11:23.930 --> 00:11:28.771
+That gives us sequence of
+pairs like 0, 5, 1, 4, 2, 2.
+
+00:11:33.354 --> 00:11:36.555
+As we discussed, our plan
+for the maximum difference
+
+00:11:36.595 --> 00:11:42.558
+problem is to combine a zip
+iterator with a transform iterator.
+
+00:11:42.638 --> 00:11:45.393
+In this code, we do exactly that.
+
+00:11:45.479 --> 00:11:52.346
+First, we use make zip iterator
+on a A begin and B begin.
+
+00:11:52.482 --> 00:11:57.584
+That gives us an iterator which at
+each index returns a tuple of two
+
+00:11:57.644 --> 00:12:00.390
+floats, one from A and one from B.
+
+00:12:00.524 --> 00:12:06.006
+Next, we pass that zip iterator
+into make transform iterator
+
+00:12:06.066 --> 00:12:09.053
+along with a lambda function.
+
+00:12:09.147 --> 00:12:12.708
+Because the zip iterator returns
+a tuple of floats, that's
+
+00:12:12.768 --> 00:12:17.756
+exactly what the lambda function
+should have as a parameter.
+
+00:12:17.870 --> 00:12:21.931
+For each tuple, we extract
+the two values using thrust
+
+00:12:22.011 --> 00:12:27.331
+get, compute the absolute
+difference, and return that result.
+
+00:12:27.413 --> 00:12:30.601
+So, for the first
+elements in A and B,
+
+00:12:30.689 --> 00:12:35.534
+If the tuple is 0, 5, the
+transform iterator returns
+
+00:12:35.581 --> 00:12:39.365
+absolute of 0 minus 5, which is 5.
+
+00:12:43.382 --> 00:12:46.064
+From the reduction's
+perspective, it's just
+
+00:12:46.144 --> 00:12:48.652
+reading a single float each time.
+
+00:12:48.726 --> 00:12:51.689
+But behind the scenes, our
+transform iterator grabs two
+
+00:12:51.749 --> 00:12:56.072
+floats, one from A and one
+from B, calculates the difference
+
+00:12:56.112 --> 00:13:00.871
+on the fly, and returns the result
+without any extra reads or writes.
+
+00:13:00.916 --> 00:13:05.239
+So in total, we only need two N
+memory accesses, which is exactly
+
+00:13:05.279 --> 00:13:07.228
+the improvement we aimed for.
+
+00:13:07.301 --> 00:13:10.183
+Now let's see if this reduced
+memory traffic actually
+
+00:13:10.263 --> 00:13:13.383
+improves performance.
+
+00:13:13.590 --> 00:13:17.392
+In this graph, we have
+normalized elapsed time
+
+00:13:17.432 --> 00:13:19.283
+for different vector sizes.
+
+00:13:19.333 --> 00:13:22.815
+You can see that using fancy
+iterators is about twice as
+
+00:13:22.895 --> 00:13:26.243
+fast as storing the temporary
+differences in memory.
+
+00:13:26.317 --> 00:13:29.659
+And this comparison doesn't even
+include the cost of allocating
+
+00:13:29.719 --> 00:13:32.696
+space for those temporary arrays.
+
+00:13:32.761 --> 00:13:35.962
+If we factor in the allocation
+overhead, the speedup could
+
+00:13:36.042 --> 00:13:41.173
+climb to 70 times, but performance
+isn't the only benefit.
+
+00:13:41.226 --> 00:13:45.253
+Fancy iterators also drastically
+reduce memory usage.
+
+00:13:45.309 --> 00:13:50.016
+For instance, if your GPU
+has eight gigabytes of memory
+
+00:13:50.073 --> 00:13:54.656
+and each vector takes up four
+gigabytes, then you've essentially
+
+00:13:54.676 --> 00:14:00.281
+used up all available space
+by just storing A and B. In that
+
+00:14:00.361 --> 00:14:06.111
+scenario, a materializing approach,
+which needs extra storage for the
+
+00:14:06.125 --> 00:14:08.997
+difference vector, that would fail.
+
+00:14:09.079 --> 00:14:13.282
+Meanwhile, the fancy iterator-based
+version requires no extra
+
+00:14:13.322 --> 00:14:17.318
+space and would work just fine.
+
+00:14:17.525 --> 00:14:19.806
+Most of the parallel
+algorithms we've seen
+
+00:14:19.906 --> 00:14:23.827
+so far are very challenging
+to implement efficiently.
+
+00:14:23.889 --> 00:14:27.271
+That's why it's crucial to
+understand how to adapt the
+
+00:14:27.351 --> 00:14:32.435
+accelerated libraries to your
+unique use cases without having
+
+00:14:32.495 --> 00:14:35.086
+to re-implement them.
+
+00:14:35.214 --> 00:14:38.303
+In this exercise, we want
+to calculate the variance
+
+00:14:38.315 --> 00:14:41.826
+of a temperature data set,
+which requires us to compute
+
+00:14:41.836 --> 00:14:46.426
+the squared difference of
+each element from the mean.
+
+00:14:46.517 --> 00:14:50.998
+A naive approach would create
+a whole new buffer in memory
+
+00:14:51.078 --> 00:14:56.721
+to store these squared differences,
+which wastes both time and space.
+
+00:14:56.839 --> 00:15:01.460
+Instead, since you now know
+how to handle this using fancy
+
+00:15:01.560 --> 00:15:05.145
+iterators, you'll compute There may
+be squared differences on the fly.
+
+00:15:05.199 --> 00:15:08.210
+Feeding them straight into
+the reduction without ever
+
+00:15:08.220 --> 00:15:10.942
+creating a separate array.
+
+00:15:11.081 --> 00:15:14.724
+In the code snippet, you'll
+see a placeholder for
+
+00:15:14.762 --> 00:15:16.616
+squared differences.
+
+00:15:16.723 --> 00:15:21.544
+Your task is to replace the
+placeholder with a transform
+
+00:15:21.624 --> 00:15:24.749
+iterator that computes the squared
+There are specific differences
+
+00:15:24.765 --> 00:15:26.766
+between each element and the mean.
+

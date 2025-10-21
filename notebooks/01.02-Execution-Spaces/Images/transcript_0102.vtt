@@ -1,0 +1,822 @@
+WEBVTT
+
+00:00:00.891 --> 00:00:03.932
+Let's revisit the problem
+of n objects cooling down
+
+00:00:03.972 --> 00:00:05.446
+to room temperature.
+
+00:00:05.512 --> 00:00:08.792
+Our goal is to simulate how
+these objects gradually approach
+
+00:00:08.852 --> 00:00:13.533
+the ambient temperature using the
+temperature equation shown here.
+
+00:00:13.653 --> 00:00:17.886
+At each step, the equation
+adjusts an object's temperature
+
+00:00:17.934 --> 00:00:21.155
+based on the difference between
+its current temperature and
+
+00:00:21.215 --> 00:00:22.921
+the room temperature.
+
+00:00:23.015 --> 00:00:26.586
+Note that each object cools
+down independently.
+
+00:00:26.696 --> 00:00:28.618
+They all follow the same rule.
+
+00:00:28.663 --> 00:00:32.179
+But one object's temperature
+doesn't affect another's.
+
+00:00:32.225 --> 00:00:36.227
+This independence makes it a
+perfect candidate for parallel
+
+00:00:36.267 --> 00:00:40.183
+computing because we can update
+every object's temperature
+
+00:00:40.209 --> 00:00:41.922
+at the same time.
+
+00:00:42.010 --> 00:00:45.032
+Over time, they all come
+closer to the ambient
+
+00:00:45.052 --> 00:00:47.813
+temperature of 20 degrees.
+
+00:00:50.029 --> 00:00:54.208
+Let's see how we can implement
+this simulation in C++.
+
+00:00:54.272 --> 00:00:58.297
+We start by defining a cooling
+coefficient k and setting the
+
+00:00:58.315 --> 00:01:00.940
+ambient temperature to 20 degrees.
+
+00:01:01.017 --> 00:01:05.639
+The temp vector holds the initial
+temperatures for three objects.
+
+00:01:05.740 --> 00:01:08.742
+We then define a lambda
+function that calculates the new
+
+00:01:08.782 --> 00:01:11.009
+temperatures based on the old ones.
+
+00:01:11.084 --> 00:01:14.348
+Next, we apply this function
+to each temperature using
+
+00:01:14.366 --> 00:01:20.620
+STD transform, a C++ algorithm,
+which updates the values in place.
+
+00:01:20.731 --> 00:01:24.294
+By running this transformation
+for several steps, each object's
+
+00:01:24.334 --> 00:01:27.636
+temperature gradually shifts
+closer to ambient.
+
+00:01:27.696 --> 00:01:30.750
+This can be seen in the
+table on the right.
+
+00:01:30.838 --> 00:01:36.062
+Initially, at step 0, we have
+temperatures we started with,
+
+00:01:36.062 --> 00:01:38.713
+42, 24, 50 degrees.
+
+00:01:38.824 --> 00:01:42.404
+By step 2, these temperatures
+have moved toward ambient
+
+00:01:42.446 --> 00:01:45.767
+and are now 25, 21, and 27 degrees.
+
+00:01:48.431 --> 00:01:52.184
+Just in case you're not familiar
+with std transform here's
+
+00:01:52.194 --> 00:01:53.813
+a quick overview.
+
+00:01:53.895 --> 00:01:57.848
+It's a standard library algorithm
+that takes a range of input
+
+00:01:57.859 --> 00:02:02.602
+elements, applies an operation
+to each one, and stores the
+
+00:02:02.622 --> 00:02:05.490
+result in a given output range.
+
+00:02:05.605 --> 00:02:08.200
+Think of it as a conveyor belt.
+
+00:02:08.247 --> 00:02:11.219
+Each item goes in gets
+transformed and then the
+
+00:02:11.229 --> 00:02:12.970
+output is placed somewhere.
+
+00:02:13.030 --> 00:02:16.833
+In our case we provide the
+start and the end of the
+
+00:02:16.893 --> 00:02:18.167
+temp NVIDIA Vector.
+
+00:02:18.240 --> 00:02:20.893
+to specify the input range.
+
+00:02:21.022 --> 00:02:26.485
+We then specify tempBegin again
+as the output, so we overwrite
+
+00:02:26.505 --> 00:02:29.126
+the original values in place.
+
+00:02:29.247 --> 00:02:32.770
+Finally, we pass our lambda
+function, which calculates
+
+00:02:32.830 --> 00:02:34.350
+the new temperature.
+
+00:02:34.431 --> 00:02:37.853
+Visually, each old temperature
+is fed into the operation.
+
+00:02:37.873 --> 00:02:38.979
+42 becomes 31.
+
+00:02:39.014 --> 00:02:41.594
+50 becomes 35.
+
+00:02:48.061 --> 00:02:53.505
+In C++, std transform can,
+alternatively, be implemented
+
+00:02:53.605 --> 00:02:57.240
+as a simple for loop, like
+the one shown here.
+
+00:02:57.327 --> 00:03:00.529
+But let's take a step back
+and see what must happen to
+
+00:03:00.609 --> 00:03:03.910
+run this code on the CPU.
+
+00:03:05.046 --> 00:03:08.562
+CPUs don't
+inherently understand C++.
+
+00:03:08.609 --> 00:03:10.488
+They execute machine instructions.
+
+00:03:10.530 --> 00:03:15.374
+That's why we rely on compilers to
+translate high-level C++ code into
+
+00:03:15.474 --> 00:03:17.879
+architecture-specific instructions.
+
+00:03:17.956 --> 00:03:22.879
+For example, on an x86 platform,
+a simple C++ arithmetic
+
+00:03:22.959 --> 00:03:27.392
+expression may be compiled
+into a fused multiply add,
+
+00:03:27.443 --> 00:03:31.564
+FMA, instruction like VFMAD.
+
+00:03:31.676 --> 00:03:34.414
+But instruction sets
+vary by architecture.
+
+00:03:34.458 --> 00:03:38.359
+What works on an x86 CPU
+won't necessarily work on
+
+00:03:38.382 --> 00:03:42.278
+ARM, which uses its own
+instruction set architecture.
+
+00:03:42.365 --> 00:03:44.114
+GPUs are no different.
+
+00:03:44.146 --> 00:03:48.272
+They're just another processor type
+with their own set of instructions.
+
+00:03:48.330 --> 00:03:51.693
+This means we need a specialized
+compiler that can generate
+
+00:03:51.773 --> 00:03:54.954
+GPU instructions.
+
+00:03:55.695 --> 00:04:02.682
+This is where the NVIDIA CUDA
+compiler or NVCC comes into play.
+
+00:04:02.760 --> 00:04:08.166
+NVCC is the tool chain used to
+compile CUDA C++ code targeting
+
+00:04:08.184 --> 00:04:11.596
+both the CPU and NVIDIA GPUs.
+
+00:04:11.667 --> 00:04:16.510
+At first glance, it might seem
+like compiling CUDA code with NVCC
+
+00:04:16.551 --> 00:04:21.607
+would result in a GPU accelerated
+program, but here's the catch.
+
+00:04:21.656 --> 00:04:27.442
+Just compiling with MVCC doesn't
+mean your code runs on the GPU.
+
+00:04:27.520 --> 00:04:31.543
+This might seem counterintuitive,
+but with CUDA, compiling
+
+00:04:31.583 --> 00:04:35.731
+the code isn't enough to
+trigger GPU execution.
+
+00:04:35.826 --> 00:04:39.208
+This apparent contradiction
+highlights a key concept of
+
+00:04:39.248 --> 00:04:42.988
+the CUDA programming model
+that we haven't addressed yet.
+
+00:04:43.071 --> 00:04:49.554
+Explicit GPU execution must be
+programmed by the developer.
+
+00:04:51.260 --> 00:04:55.631
+GPUs are accelerators rather
+than standalone processors.
+
+00:04:55.703 --> 00:05:00.362
+A lot of work like interactions
+with network and file systems can
+
+00:05:00.386 --> 00:05:06.680
+only be done on the CPU, so a CUDA
+program always starts on the CPU.
+
+00:05:06.771 --> 00:05:11.474
+You are responsible for explicitly
+specifying which code has
+
+00:05:11.534 --> 00:05:13.859
+to run on the GPU.
+
+00:05:13.956 --> 00:05:17.078
+In other words, you are
+responsible for specifying
+
+00:05:17.138 --> 00:05:19.710
+which code runs where.
+
+00:05:19.807 --> 00:05:24.229
+The established terminology
+for where code is executed
+
+00:05:24.249 --> 00:05:26.901
+is execution space.
+
+00:05:27.030 --> 00:05:31.033
+At a high level, these execution
+spaces are partitioned into
+
+00:05:31.051 --> 00:05:35.616
+host, CPU, and device, GPU.
+
+00:05:35.713 --> 00:05:39.402
+These terms are used to generalize
+the programming model.
+
+00:05:39.474 --> 00:05:42.887
+By default, code runs
+on the host side.
+
+00:05:42.975 --> 00:05:45.956
+You are responsible for
+specifying which code should
+
+00:05:46.016 --> 00:05:48.266
+run on the device.
+
+00:05:48.354 --> 00:05:53.139
+This explains why compiling
+with NVCC alone isn't enough.
+
+00:05:53.186 --> 00:05:59.937
+We haven't explicitly designated
+any code to run on the GPU.
+
+00:06:02.145 --> 00:06:06.096
+So how do we actually run
+any code on the GPU?
+
+00:06:06.167 --> 00:06:10.108
+In C++, we often rely on libraries
+rather than re-implementing
+
+00:06:10.188 --> 00:06:11.809
+every feature from scratch.
+
+00:06:11.849 --> 00:06:15.511
+For instance, it's likely
+that you've used printf or std
+
+00:06:15.571 --> 00:06:18.464
+sort instead of implementing them.
+
+00:06:18.532 --> 00:06:20.318
+And CUDA is no different.
+
+00:06:20.373 --> 00:06:23.444
+Along with NVCC, CUDA
+provides a wealth of
+
+00:06:23.454 --> 00:06:25.921
+GPU-accelerated libraries.
+
+00:06:25.995 --> 00:06:28.812
+Some libraries are
+generic, like Thrust.
+
+00:06:28.868 --> 00:06:32.691
+which offers high-level
+algorithms similar to the
+
+00:06:32.751 --> 00:06:35.180
+C++ standard library.
+
+00:06:35.253 --> 00:06:39.355
+There are also domain-specific
+libraries such as QDNN for
+
+00:06:39.395 --> 00:06:43.672
+deep neural networks and QBLAS
+for linear algebra.
+
+00:06:43.738 --> 00:06:48.021
+Most of these build on the
+CUDA runtime, the core set
+
+00:06:48.062 --> 00:06:52.320
+of APIs for managing and
+communicating with the GPU.
+
+00:06:52.425 --> 00:06:56.547
+Since this course is not
+domain-specific, we'll focus on one
+
+00:06:56.567 --> 00:06:59.104
+of the generic libraries, Thrust.
+
+00:06:59.159 --> 00:07:01.616
+Let's dive in!
+
+00:07:01.801 --> 00:07:06.741
+Thrust is a library that helps
+you write GPU-accelerated programs
+
+00:07:06.785 --> 00:07:11.738
+using tools that feel very similar
+to the C++ standard library.
+
+00:07:11.809 --> 00:07:14.891
+It simplifies working with
+GPUs by offering pre-built
+
+00:07:14.951 --> 00:07:17.319
+components for common tasks.
+
+00:07:17.393 --> 00:07:21.222
+Thrust containers give you
+GPU-friendly alternatives
+
+00:07:21.256 --> 00:07:27.618
+To things like STD vector, the
+thrust algorithms like thrust copy,
+
+00:07:27.674 --> 00:07:31.818
+ThrustSort, et cetera, provide
+GPU accelerated alternatives
+
+00:07:31.898 --> 00:07:33.761
+to standard algorithms.
+
+00:07:33.840 --> 00:07:38.184
+Long story short, Thrust makes it
+easier to write clean, efficient
+
+00:07:38.264 --> 00:07:43.545
+code for GPUs without worrying too
+much about the low level details.
+
+00:07:43.610 --> 00:07:47.627
+We'll start simple and explore
+how Thrust can help accelerate
+
+00:07:47.674 --> 00:07:51.095
+our cooling simulator.
+
+00:07:52.668 --> 00:07:57.778
+On the left, you can see our CPU
+version, where we use std vector
+
+00:07:57.792 --> 00:08:03.211
+to store data and std transform
+to apply the cooling operation.
+
+00:08:03.316 --> 00:08:08.069
+On the right, we've adapted it
+to GPU execution with thrust.
+
+00:08:08.180 --> 00:08:12.394
+We replaced std vector with
+thrust universal vector.
+
+00:08:12.463 --> 00:08:16.895
+We also added the host device
+specifiers to the Lambda.
+
+00:08:16.986 --> 00:08:21.390
+And lastly, we swapped std
+transform for thrust transform.
+
+00:08:21.437 --> 00:08:24.313
+And added the
+thrust device argument.
+
+00:08:24.440 --> 00:08:27.002
+With these small changes,
+our code is now set up to
+
+00:08:27.062 --> 00:08:29.962
+run efficiently on the GPU.
+
+00:08:30.065 --> 00:08:33.952
+Thrust keeps the style of
+the C++ standard library,
+
+00:08:34.008 --> 00:08:37.741
+making GPU acceleration much
+more straightforward.
+
+00:08:37.852 --> 00:08:41.915
+Next, let's take a closer look
+at each of these adjustments,
+
+00:08:41.975 --> 00:08:46.678
+starting with the execution
+space specifiers.
+
+00:08:47.808 --> 00:08:51.332
+As we discussed, you must
+specify which hardware each
+
+00:08:51.412 --> 00:08:53.481
+function is compiled for.
+
+00:08:53.574 --> 00:08:57.305
+That's where execution space
+specifiers come into play.
+
+00:08:57.358 --> 00:09:01.675
+If you remember, all code is
+compiled for CPUs by default.
+
+00:09:01.742 --> 00:09:05.186
+That means that if you don't
+annotate the function in any
+
+00:09:05.246 --> 00:09:10.589
+way, there will be no instructions
+for GPU to execute.
+
+00:09:11.055 --> 00:09:13.897
+To fix that, you can annotate
+the Lambda function with the
+
+00:09:13.957 --> 00:09:16.857
+device execution space specifier.
+
+00:09:16.919 --> 00:09:21.987
+In this case, MVCC will generate
+instructions only for the GPU.
+
+00:09:22.063 --> 00:09:27.446
+But now there are no instructions
+for the CPU to execute.
+
+00:09:27.722 --> 00:09:30.743
+If you want the function to
+get compiled for both CPU
+
+00:09:30.783 --> 00:09:35.909
+and GPU, you can add host and
+device specifiers at the same time.
+
+00:09:35.966 --> 00:09:40.907
+And that's exactly what we'll
+do for the rest of this course.
+
+00:09:41.317 --> 00:09:45.788
+Besides the execution specifiers,
+we've made another change.
+
+00:09:45.859 --> 00:09:49.660
+In the original code, we used
+std transform and in the GPU
+
+00:09:49.700 --> 00:09:52.893
+version we use thrust transform.
+
+00:09:52.981 --> 00:09:55.842
+Aside from the difference
+in the namespaces, the main
+
+00:09:55.922 --> 00:10:00.045
+change is that we added thrust
+device as the first parameter.
+
+00:10:00.124 --> 00:10:03.197
+This parameter is called the
+execution policy.
+
+00:10:03.245 --> 00:10:06.166
+It tells thrust where to
+run the algorithm.
+
+00:10:06.206 --> 00:10:07.246
+For example,
+
+00:10:07.298 --> 00:10:11.103
+Thrust host runs the algorithm
+on the CPU behaving much
+
+00:10:11.163 --> 00:10:13.699
+like STD transform.
+
+00:10:13.826 --> 00:10:18.905
+Thrust device, on the other hand,
+runs the algorithm on the GPU.
+
+00:10:19.012 --> 00:10:22.604
+Thanks to this consistent
+interface, you can write your
+
+00:10:22.617 --> 00:10:27.966
+algorithm once and then decide
+whether it runs on the CPU or GPU.
+
+00:10:28.069 --> 00:10:31.235
+This eliminates the need to
+maintain two separate code
+
+00:10:31.255 --> 00:10:36.685
+paths and make switching between
+CPU and GPU as easy as changing
+
+00:10:36.705 --> 00:10:40.148
+the execution policy.
+
+00:10:41.107 --> 00:10:46.685
+To clarify, execution policies
+aren't specific to thrust.
+
+00:10:46.751 --> 00:10:50.694
+They're a more general concept that
+also influenced the introduction
+
+00:10:50.734 --> 00:10:55.145
+of parallel algorithms in C++17.
+
+00:10:55.238 --> 00:11:00.762
+In both thrust and C++17,
+execution policies are passed as
+
+00:11:00.842 --> 00:11:06.044
+the first argument to control how
+the algorithm runs, for example,
+
+00:11:06.086 --> 00:11:08.305
+sequentially or in parallel.
+
+00:11:08.368 --> 00:11:10.311
+What sets thrust apart
+
+00:11:10.365 --> 00:11:15.628
+Its execution policies also define
+where the computation takes place,
+
+00:11:15.672 --> 00:11:19.455
+whether on the CPU or the GPU.
+
+00:11:21.095 --> 00:11:24.297
+It's important to understand the
+difference between the execution
+
+00:11:24.377 --> 00:11:26.856
+specifiers and execution policies.
+
+00:11:26.898 --> 00:11:28.473
+So let's compare them.
+
+00:11:28.539 --> 00:11:32.457
+When you mark a function with
+an execution specifier like
+
+00:11:32.481 --> 00:11:37.304
+host or device, you're telling the
+compiler to generate instructions
+
+00:11:37.384 --> 00:11:40.687
+for CPU, GPU, or both.
+
+00:11:40.777 --> 00:11:43.580
+It doesn't automatically make
+the function run there.
+
+00:11:43.602 --> 00:11:47.287
+It just prepares the code
+for the execution space.
+
+00:11:47.370 --> 00:11:51.597
+So if you annotate a function
+with device and call it from
+
+00:11:51.617 --> 00:11:55.421
+a CPU, it'll just fail.
+
+00:11:57.668 --> 00:12:01.974
+On the other hand, when you pass
+an execution policy argument,
+
+00:12:02.013 --> 00:12:07.218
+like Thrust Device or Thrust Host,
+it's equivalent to saying, now run
+
+00:12:07.278 --> 00:12:10.769
+this algorithm on the GPU or CPU.
+
+00:12:10.862 --> 00:12:16.159
+But this does not generate any
+new GPU or CPU instructions.
+
+00:12:16.208 --> 00:12:19.411
+It simply picks which
+already compiled version
+
+00:12:19.431 --> 00:12:22.312
+should be executed.
+
+00:12:22.825 --> 00:12:24.948
+In short, you need both pieces.
+
+00:12:25.006 --> 00:12:28.847
+Execution space specifiers
+like host, device tell the
+
+00:12:28.867 --> 00:12:33.200
+compiler to generate the
+required CPU or GPU code.
+
+00:12:33.308 --> 00:12:38.246
+Execution policies like thrust
+host or thrust device decide
+
+00:12:38.270 --> 00:12:40.966
+where the code actually runs.
+
+00:12:41.070 --> 00:12:45.316
+If you don't use the specifier,
+there's no GPU version compiled
+
+00:12:45.372 --> 00:12:47.752
+and if you don't use the
+execution policy, there's
+
+00:12:47.792 --> 00:12:49.971
+no instruction to run the GPU.
+
+00:12:50.031 --> 00:12:54.977
+They work hand-in-hand to
+enable GPU acceleration.
+
+00:12:55.717 --> 00:13:00.262
+This table shows how the
+specifier, host and device,
+
+00:13:00.321 --> 00:13:04.488
+combine with the policy,
+thrust host or thrust device,
+
+00:13:04.544 --> 00:13:06.802
+to determine where code runs.
+
+00:13:06.866 --> 00:13:11.290
+Host functions are CPU only,
+so thrust fails if you try
+
+00:13:11.350 --> 00:13:13.235
+to run them on the GPU.
+
+00:13:13.291 --> 00:13:17.174
+Device functions are GPU only,
+so thrust fails if you try
+
+00:13:17.215 --> 00:13:18.959
+to run them on CPU.
+
+00:13:19.036 --> 00:13:23.122
+Finally, host device functions
+are compiled for both
+
+00:13:23.174 --> 00:13:29.599
+And the policy decides whether it
+actually runs on the CPU or GPU.
+
+00:13:30.888 --> 00:13:33.949
+In addition to this notebook,
+there are three exercise
+
+00:13:34.009 --> 00:13:35.835
+notebooks in this section.
+
+00:13:35.910 --> 00:13:38.917
+For the first exercise, you'll
+check your understanding of
+
+00:13:38.931 --> 00:13:41.047
+where your code is executed.
+
+00:13:41.112 --> 00:13:43.632
+And this is fundamental
+to harnessing the power
+
+00:13:43.692 --> 00:13:45.679
+of accelerated computing.
+
+00:13:45.773 --> 00:13:49.032
+In the exercise code, you'll
+replace all the question marks
+
+00:13:49.054 --> 00:13:53.035
+with either CPU or GPU.
+
+00:13:53.669 --> 00:13:56.944
+In the second exercise, you'll
+verify your understanding of
+
+00:13:56.956 --> 00:13:59.361
+execution specifiers and policies.
+
+00:13:59.422 --> 00:14:02.609
+For this one, you'll modify
+the code so the lambda
+
+00:14:02.649 --> 00:14:06.032
+is executed on GPU.
+
+00:14:06.383 --> 00:14:10.896
+In this last exercise, you'll GPU
+accelerate the media infection.
+
+00:14:10.943 --> 00:14:11.245
+Good luck.
