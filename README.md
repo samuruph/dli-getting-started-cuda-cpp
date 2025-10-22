@@ -7,6 +7,7 @@ Notes and experiments from the **"Getting Started with Accelerated Computing in 
 
 TODO: Add course overview here.
 
+
 ---
 
 ## 📚 Table of Contents
@@ -16,11 +17,19 @@ The course is structured into the following modules:
 - **Chapter 3 - Implementing new algorithms with CUDA kernels**
 - **Chapter 4 - Final assessment**
 
+
 ---
 
 ## ⚙️ Prerequisites
+Before starting this course, ensure you have the following prerequisites:
+- Basic knowledge of C++ programming (variables, loops, if-else)
+- Pointers and iterators to access arrays of data
+- Standard C++ iterator-based algorithms (e.g., `std::for_each`, `std::transform`)
+- Lambda expressions in C++
+- Standard containers like `std::vector` in C++
 
-TODO: Add prerequisites here.
+You would not need any prior experience with CUDA programming.
+
 
 ---
 
